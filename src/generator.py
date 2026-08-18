@@ -1,58 +1,83 @@
-import os
-from typing import List, Dict, Any, Optional
-from google import genai
-from google.genai import errors
+"""
+generator.py — The brain of the RAG pipeline.
 
-from src.config import (
-    GOOGLE_API_KEY,
-    LLM_MODEL_NAME,
-    TOP_K,
-    SIM_THRESHOLD,
-)
+Flow:
+    User query
+        → retrieve() — find relevant chunks from ChromaDB
+        → confidence check — abstain if similarity is too low
+        → build_prompt() — assemble a grounded prompt with cited clauses
+        → generate_llm_response() — call Google Gemini
+        → return structured answer with sources
+"""
+import os
+from typing import List, Dict, Any
+
+from google import genai
+
+from src.config import GOOGLE_API_KEY, LLM_MODEL_NAME, TOP_K, SIM_THRESHOLD
 from src.vectorstore import retrieve
 
-# List of preferred model names in case of deprecation/rate-limit failover
-FALLBACK_MODELS = [
+
+# ── Fallback model list ───────────────────────────────────────────────────────
+# If the primary model is rate-limited or deprecated, we automatically try
+# the next one in this list. dict.fromkeys() preserves order and removes
+# duplicates (important if LLM_MODEL_NAME matches one of the hardcoded names).
+FALLBACK_MODELS = list(dict.fromkeys([
     LLM_MODEL_NAME,
-    "gemini-3-flash-preview",
     "gemini-2.5-flash",
     "gemini-flash-latest",
     "gemini-2.5-pro",
-]
+]))
 
+# ── Singleton Gemini client ───────────────────────────────────────────────────
+# Initialised once on first use so we don't re-authenticate on every call.
 _genai_client = None
 
 
 def get_genai_client() -> genai.Client:
     """
-    Returns an authenticated Google GenAI client instance.
+    Return an authenticated Google GenAI client (created once, reused after).
+
+    Reads GOOGLE_API_KEY from config (which checks Streamlit secrets → .env →
+    environment variable, in that order).
     """
     global _genai_client
     if _genai_client is None:
         api_key = GOOGLE_API_KEY or os.getenv("GOOGLE_API_KEY", "")
         if not api_key:
-            raise ValueError("GOOGLE_API_KEY is not set in environment or .env file.")
+            raise ValueError(
+                "GOOGLE_API_KEY is not set. "
+                "Add it to your .env file or Streamlit secrets."
+            )
         _genai_client = genai.Client(api_key=api_key)
     return _genai_client
 
 
 def build_prompt(query: str, chunks: List[Dict[str, Any]]) -> str:
     """
-    Constructs a grounded RAG prompt strictly requiring source clause citations.
+    Assemble a grounded RAG prompt from retrieved source clauses.
+
+    Each clause is labelled with its document name, page, and similarity score
+    so the LLM knows exactly where to cite from.
+
+    Args:
+        query:  The user's question.
+        chunks: Retrieved chunk dicts from retrieve().
+
+    Returns:
+        A formatted string ready to send to the Gemini model.
     """
     context_blocks = []
     for idx, c in enumerate(chunks, start=1):
-        source = c.get("source", "Unknown")
-        page = c.get("page", "?")
-        score = c.get("score", 0.0)
-        text = c.get("text", "").strip()
         context_blocks.append(
-            f"[Source Clause {idx} | Document: {source} | Page: {page} | Score: {score:.3f}]\n{text}"
+            f"[Source Clause {idx} | Document: {c.get('source', 'Unknown')} "
+            f"| Page: {c.get('page', '?')} | Score: {c.get('score', 0.0):.3f}]\n"
+            f"{c.get('text', '').strip()}"
         )
 
     context_str = "\n\n".join(context_blocks)
 
-    prompt = f"""You are the official Sarkari Scheme Navigator assistant. Your mission is to provide accurate, truthful, and helpful information about Indian Government schemes based STRICTLY on the official source documents provided below.
+    return f"""You are the official Sarkari Scheme Navigator assistant. Your mission is to provide accurate, truthful, and helpful information about Indian Government schemes based STRICTLY on the official source documents provided below.
 
 RULES:
 1. Ground every factual answer directly in the source clauses provided below.
@@ -67,120 +92,141 @@ RULES:
 Question: {query}
 
 Answer:"""
-    return prompt
 
 
 def generate_llm_response(prompt: str) -> str:
     """
-    Invokes the Google Gemini model with automatic fallback.
+    Send a prompt to Google Gemini and return the response text.
+
+    Automatically tries each model in FALLBACK_MODELS until one succeeds,
+    so the app keeps working even during rate-limits or model deprecations.
+
+    Args:
+        prompt: The fully assembled RAG prompt.
+
+    Returns:
+        The model's response as a plain string.
+
+    Raises:
+        RuntimeError: If every model in FALLBACK_MODELS fails.
     """
     client = get_genai_client()
     last_err = None
 
     for model_name in FALLBACK_MODELS:
         try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-            )
+            response = client.models.generate_content(model=model_name, contents=prompt)
             if response and response.text:
                 return response.text.strip()
         except Exception as e:
             last_err = e
-            continue
+            continue  # Try next model
 
-    raise RuntimeError(f"Failed to generate response across all models. Last error: {last_err}")
+    raise RuntimeError(
+        f"All models in FALLBACK_MODELS failed. Last error: {last_err}"
+    )
 
 
 def answer(
     query: str,
     k: int = TOP_K,
-    threshold: float = SIM_THRESHOLD
+    threshold: float = SIM_THRESHOLD,
 ) -> Dict[str, Any]:
     """
-    End-to-end RAG answer pipeline with retrieval confidence guardrails.
+    End-to-end RAG pipeline: retrieve → check confidence → generate → cite.
 
     Args:
-        query: User question
-        k: Number of chunks to retrieve
-        threshold: Minimum similarity threshold (0.0 to 1.0). If confidence < threshold, abstains.
+        query:     The user's question (plain text).
+        k:         Number of chunks to retrieve from ChromaDB.
+        threshold: Minimum cosine similarity to proceed with generation.
+                   If the best chunk scores below this, the system abstains
+                   rather than risk hallucinating an answer.
 
     Returns:
-        Dict with answer, sources, confidence, and abstained status.
+        {
+            'query':            Original question,
+            'answer':           Generated text (or abstention message),
+            'sources':          List of cited source dicts,
+            'abstained':        True if confidence was too low,
+            'confidence':       Best chunk similarity score (float),
+            'retrieved_chunks': Raw retrieval output (for debugging),
+        }
     """
     query = query.strip()
     if not query:
         return {
             "query": query,
-            "answer": "Please ask a valid question.",
+            "answer": "Please enter a valid question.",
             "sources": [],
             "abstained": True,
             "confidence": 0.0,
-            "retrieved_chunks": []
+            "retrieved_chunks": [],
         }
 
-    # Step 1: Retrieve candidate chunks
+    # ── Step 1: Retrieve the most relevant chunks ─────────────────────────────
     retrieved_chunks = retrieve(query, k=k)
 
-    # Step 2: Check confidence threshold
-    confidence = max([c["score"] for c in retrieved_chunks]) if retrieved_chunks else 0.0
+    # ── Step 2: Confidence gate — abstain if best score is too low ────────────
+    confidence = max((c["score"] for c in retrieved_chunks), default=0.0)
 
     if not retrieved_chunks or confidence < threshold:
         return {
             "query": query,
             "answer": (
-                f"I cannot find sufficient relevant information in the government scheme documents "
-                f"to answer this question reliably (retrieval confidence {confidence:.2f} is below "
-                f"the confidence threshold of {threshold:.2f})."
+                f"I cannot find sufficient relevant information in the government scheme "
+                f"documents to answer this question reliably "
+                f"(retrieval confidence {confidence:.2f} < threshold {threshold:.2f})."
             ),
             "sources": [],
             "abstained": True,
             "confidence": round(confidence, 4),
-            "retrieved_chunks": retrieved_chunks
+            "retrieved_chunks": retrieved_chunks,
         }
 
-    # Step 3: Format grounded prompt & generate answer
+    # ── Step 3: Build grounded prompt and call Gemini ─────────────────────────
     prompt = build_prompt(query, retrieved_chunks)
     try:
         response_text = generate_llm_response(prompt)
     except Exception as e:
-        response_text = f"Error generating answer from language model: {str(e)}"
+        response_text = f"Error generating answer from language model: {e}"
 
-    # Step 4: Extract deduplicated sources list
-    seen_sources = set()
+    # ── Step 4: Deduplicate sources for the citation panel ────────────────────
+    seen_keys: set = set()
     sources = []
     for c in retrieved_chunks:
         key = (c["source"], c["page"])
-        if key not in seen_sources:
-            seen_sources.add(key)
+        if key not in seen_keys:
+            seen_keys.add(key)
+            text = c["text"]
             sources.append({
-                "source": c["source"],
-                "page": c["page"],
-                "score": c["score"],
-                "excerpt": c["text"][:180] + "..." if len(c["text"]) > 180 else c["text"]
+                "source":  c["source"],
+                "page":    c["page"],
+                "score":   c["score"],
+                "excerpt": text[:180] + "..." if len(text) > 180 else text,
             })
 
     return {
-        "query": query,
-        "answer": response_text,
-        "sources": sources,
-        "abstained": False,
-        "confidence": round(confidence, 4),
-        "retrieved_chunks": retrieved_chunks
+        "query":            query,
+        "answer":           response_text,
+        "sources":          sources,
+        "abstained":        False,
+        "confidence":       round(confidence, 4),
+        "retrieved_chunks": retrieved_chunks,
     }
 
 
+# ── Quick dev smoke-test: python src/generator.py ────────────────────────────
 if __name__ == "__main__":
-    test_q = "How much prize money can the top 10 winners of the Arunachal Pradesh Entrepreneurship Challenge receive?"
-    print(f"\nQuery: {test_q}")
-    res = answer(test_q)
-    print("\nAnswer:\n", res["answer"])
-    print("\nSources:", res["sources"])
-    print("\nConfidence:", res["confidence"], "| Abstained:", res["abstained"])
+    in_scope = "How much prize money can the top 10 winners of the Arunachal Pradesh Entrepreneurship Challenge receive?"
+    print(f"\nQuery (in-scope): {in_scope}")
+    res = answer(in_scope)
+    print("Answer:\n", res["answer"])
+    print("Sources:", res["sources"])
+    print("Confidence:", res["confidence"], "| Abstained:", res["abstained"])
 
     print("\n" + "=" * 60)
-    out_of_scope_q = "What is the capital of France?"
-    print(f"Out-of-Scope Query: {out_of_scope_q}")
-    res_out = answer(out_of_scope_q)
-    print("\nAnswer:\n", res_out["answer"])
-    print("\nConfidence:", res_out["confidence"], "| Abstained:", res_out["abstained"])
+    out_scope = "What is the capital of France?"
+    print(f"Query (out-of-scope): {out_scope}")
+    res2 = answer(out_scope)
+    print("Answer:\n", res2["answer"])
+    print("Confidence:", res2["confidence"], "| Abstained:", res2["abstained"])

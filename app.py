@@ -136,8 +136,8 @@ with st.sidebar:
     with col_d:
         st.markdown("""
         <div class="metric-card">
-            <div class="num" style="color:#0369a1;">80%</div>
-            <div class="label">Abstention Rate</div>
+            <div class="num" style="color:#0369a1;">98.75%</div>
+            <div class="label">MRR @ 5</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown("---")
@@ -219,11 +219,17 @@ for msg in st.session_state.messages:
 # ── Handle new input ──────────────────────────────────────────────────────────
 prompt_input = st.chat_input("Ask about any government scheme — eligibility, grants, loan caps…")
 
+# Guard against the sample dropdown re-firing on every Streamlit re-render.
+# We store the last-used sample in session_state and only act when it changes.
+if "_last_sample" not in st.session_state:
+    st.session_state["_last_sample"] = "Select a sample..."
+
 active_prompt = None
 if prompt_input:
     active_prompt = prompt_input
-elif selected_sample and selected_sample != "Select a sample...":
+elif selected_sample != "Select a sample..." and selected_sample != st.session_state["_last_sample"]:
     active_prompt = selected_sample
+    st.session_state["_last_sample"] = selected_sample
 
 if active_prompt:
     # Show user message

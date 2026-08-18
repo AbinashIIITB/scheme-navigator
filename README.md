@@ -12,7 +12,7 @@
 * **Evaluation Benchmark**: Evaluated on a **40-question hand-written evaluation dataset**, achieving **100% Recall@5** (`1.0000`) and **0.9875 MRR@5**.
 * **Source Clause Grounding**: Every answer is strictly grounded in cited clauses referencing `[Source: <filename>, Page <page>]`.
 * **Abstain Guardrails**: Built-in similarity confidence thresholding ($S < 0.35$) that abstains rather than hallucinating when queries are out-of-scope or unverified.
-* **Serving Layer**: High-performance asynchronous **FastAPI REST endpoints** (`/health`, `/ask`) and an interactive **Streamlit chat application**.
+* **Serving Layer**: High-performance asynchronous **FastAPI REST endpoints** (`/health`, `/ask`, `/ingest`) and an interactive **Streamlit chat application**.
 
 ---
 
@@ -62,7 +62,10 @@
 
 ## 📊 Evaluation Results
 
-Evaluated against `eval/questions.json` (40 hand-curated questions covering eligibility, subsidies, loan caps, and terms across schemes):
+Two evaluation suites are provided:
+
+### Suite 1 — Retrieval Quality (`eval/questions.json`)
+40 hand-curated questions covering eligibility, subsidies, loan caps, and terms across schemes:
 
 | Metric | Measured Value |
 |---|---|
@@ -72,7 +75,16 @@ Evaluated against `eval/questions.json` (40 hand-curated questions covering elig
 | **MRR @ 5 (Mean Reciprocal Rank)** | **0.9875** |
 | **Rank 1 Accuracy** | **39 / 40 (97.5%)** |
 
-Run evaluation at any time:
+### Suite 2 — Abstain Guard (`eval/abstain_questions.json`)
+10 deliberately out-of-scope questions (recipes, sports, science, etc.) that the system must **refuse to answer** instead of hallucinating:
+
+| Metric | Expected Value |
+|---|---|
+| **Total Out-of-Scope Questions** | **10** |
+| **Abstain Rate** | **100%** |
+| **Hallucinated Answers** | **0** |
+
+Run both suites together:
 ```bash
 python eval/evaluate.py
 ```
@@ -84,24 +96,25 @@ python eval/evaluate.py
 ```
 scheme-navigator/
 ├── data/
-│   ├── raw/                 # 30 Government scheme PDF documents
-│   └── chroma_db/           # Persistent ChromaDB vector index
+│   ├── raw/                       # 30 Government scheme PDF documents
+│   └── chroma_db/                 # Persistent ChromaDB vector index
 ├── eval/
-│   ├── questions.json       # 40 hand-written benchmark Q&A pairs
-│   └── evaluate.py          # Recall@5 and MRR evaluation suite
+│   ├── questions.json             # 40 hand-written benchmark Q&A pairs (retrieval)
+│   ├── abstain_questions.json     # 10 out-of-scope questions (abstain guard)
+│   └── evaluate.py                # Recall@5, MRR & abstain rate evaluation suite
 ├── src/
 │   ├── __init__.py
-│   ├── config.py            # Central configurations, model names, thresholds
-│   ├── ingest.py            # PDF text extraction with pdfplumber
-│   ├── chunker.py           # Recursive text splitting & metadata tagging
-│   ├── vectorstore.py       # ChromaDB indexing and similarity retriever
-│   └── generator.py         # Grounded prompt builder, abstain guard & LLM caller
-├── api.py                   # FastAPI REST API (/health, /ask)
-├── app.py                   # Streamlit web UI with source explorer
-├── build_index.py           # One-click data ingestion & vector DB builder
-├── repl.py                  # CLI test script
-├── requirements.txt         # Pinned python dependencies
-└── README.md                # Documentation
+│   ├── config.py                  # Central configuration (models, paths, thresholds)
+│   ├── ingest.py                  # PDF text extraction with pdfplumber
+│   ├── chunker.py                 # Recursive text splitting & metadata tagging
+│   ├── vectorstore.py             # ChromaDB indexing and similarity retriever
+│   └── generator.py               # Grounded prompt builder, abstain guard & LLM caller
+├── api.py                         # FastAPI REST API (/health, /ask, /ingest)
+├── app.py                         # Streamlit web UI with source explorer
+├── build_index.py                 # One-command data ingestion & vector DB builder
+├── repl.py                        # Interactive CLI for testing without a UI
+├── requirements.txt               # Python dependencies
+└── README.md                      # This file
 ```
 
 ---
@@ -115,38 +128,56 @@ scheme-navigator/
 git clone https://github.com/yourusername/scheme-navigator.git
 cd scheme-navigator
 
-# Create and activate virtual environment
+# Create and activate a virtual environment
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate   # Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Configure Environment Variables
+### 2. Add Your Google API Key
 
 Create a `.env` file in the root directory:
 
 ```env
 GOOGLE_API_KEY=your_google_gemini_api_key_here
-LLM_MODEL=gemini-3-flash-preview
+LLM_MODEL=gemini-2.5-flash
 ```
 
-### 3. Build the Vector Index
+> **Get a free API key**: [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
 
-Ingest all 30 PDF documents, split them into chunks, and index embeddings:
+### 3. Download the Dataset & Build the Vector Index
 
 ```bash
+# Download 30 government scheme PDFs from HuggingFace Hub
+python -c "
+from huggingface_hub import snapshot_download
+snapshot_download('shrijayan/gov_myscheme', repo_type='dataset',
+                  local_dir='data/raw', allow_patterns='*.pdf')
+"
+
+# Build the ChromaDB vector index (runs once, ~30–60 seconds)
 python build_index.py
 ```
 
-### 4. Run Evaluation
+### 4. Run the Evaluation Suite
 
 ```bash
 python eval/evaluate.py
 ```
 
-### 5. Launch the FastAPI Server
+Expected output: **100% Recall@5, MRR = 0.9875**
+
+### 5. Try the Interactive CLI (Fastest)
+
+No browser needed — ask questions directly in the terminal:
+
+```bash
+python repl.py
+```
+
+### 6. Launch the FastAPI Server
 
 ```bash
 uvicorn api:app --host 0.0.0.0 --port 8000 --reload
@@ -165,7 +196,7 @@ curl -X POST http://localhost:8000/ask \
      }'
 ```
 
-### 6. Launch the Streamlit Web Application
+### 7. Launch the Streamlit Web Application
 
 ```bash
 streamlit run app.py

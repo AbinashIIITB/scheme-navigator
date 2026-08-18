@@ -1,16 +1,30 @@
+# Core PDF extraction
 pdfplumber>=0.11.0
-langchain>=0.3.0
-langchain-core>=0.3.0
-langchain-community>=0.3.0
+
+# Text splitting (the only LangChain component we actually use)
 langchain-text-splitters>=0.3.0
-langchain-google-genai>=2.0.0
-langchain-chroma>=0.1.0
+
+# Vector database (local, persistent)
 chromadb>=0.5.0
+
+# Embedding model loader
 sentence-transformers>=3.0.0
+
+# Google Gemini LLM client
+google-genai>=2.0.0
+
+# REST API server
 fastapi>=0.110.0
 uvicorn>=0.30.0
+
+# Streamlit web UI
 streamlit>=1.35.0
+
+# Environment variable management
 python-dotenv>=1.0.0
+
+# HuggingFace model hub (used by sentence-transformers internally)
 huggingface-hub>=0.23.0
+
+# Data validation for FastAPI schemas
 pydantic>=2.7.0
-google-genai>=2.0.0

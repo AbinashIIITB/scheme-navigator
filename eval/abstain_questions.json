@@ -1,0 +1,42 @@
+[
+  {
+    "q": "What is the recipe for making butter chicken at home?",
+    "reason": "Food recipe — completely unrelated to any government scheme"
+  },
+  {
+    "q": "Who won the FIFA World Cup 2022?",
+    "reason": "Sports event — not in any scheme document"
+  },
+  {
+    "q": "What is the speed of light in a vacuum?",
+    "reason": "Physics fact — not in any scheme document"
+  },
+  {
+    "q": "How do I file my US federal income tax return?",
+    "reason": "US tax law — unrelated to Indian government schemes"
+  },
+  {
+    "q": "What are the ingredients in a standard cement mixture for home construction?",
+    "reason": "Civil engineering — not covered in any scheme document"
+  },
+  {
+    "q": "Which company makes the iPhone?",
+    "reason": "Consumer technology — not in any scheme document"
+  },
+  {
+    "q": "How many planets are in the solar system?",
+    "reason": "Astronomy — completely out of scope"
+  },
+  {
+    "q": "What is the population of Japan as of 2024?",
+    "reason": "Foreign country statistics — not in any scheme document"
+  },
+  {
+    "q": "Can you write a Python function to reverse a string?",
+    "reason": "Programming task — not in any scheme document"
+  },
+  {
+    "q": "What movies did Shah Rukh Khan star in during the 1990s?",
+    "reason": "Bollywood trivia — not in any government scheme document"
+  }
+]
