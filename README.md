@@ -11,7 +11,7 @@
 * **Embeddings & Vector Store**: Dense semantic indexing using `sentence-transformers/all-MiniLM-L6-v2` (384-dimensional embeddings) in persistent **ChromaDB**.
 * **Evaluation Benchmark**: Evaluated on a **40-question hand-written evaluation dataset**, achieving **100% Recall@5** (`1.0000`) and **0.9875 MRR@5**.
 * **Source Clause Grounding**: Every answer is strictly grounded in cited clauses referencing `[Source: <filename>, Page <page>]`.
-* **Abstain Guardrails**: Built-in similarity confidence thresholding ($S < 0.35$) that abstains rather than hallucinating when queries are out-of-scope or unverified.
+* **Abstain Guardrails**: Built-in similarity confidence thresholding ($S < 0.40$) that abstains rather than hallucinating when queries are out-of-scope or unverified.
 * **Serving Layer**: High-performance asynchronous **FastAPI REST endpoints** (`/health`, `/ask`, `/ingest`) and an interactive **Streamlit chat application**.
 
 ---
@@ -44,7 +44,7 @@
                  ├────────────────► Candidate Chunks (k=5)
                  │                            │
                  │                    Confidence Check
-                 │                     (Score < 0.35?)
+                 │                     (Score < 0.40?)
                  │                     /            \
                  │             YES (Abstain)       NO (Grounded Prompt)
                  │                   │                      │
@@ -125,7 +125,7 @@ scheme-navigator/
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/scheme-navigator.git
+git clone https://github.com/AbinashIIITB/scheme-navigator.git
 cd scheme-navigator
 
 # Create and activate a virtual environment
@@ -142,7 +142,7 @@ Create a `.env` file in the root directory:
 
 ```env
 GOOGLE_API_KEY=your_google_gemini_api_key_here
-LLM_MODEL=gemini-2.5-flash
+LLM_MODEL=gemini-3.6-flash
 ```
 
 > **Get a free API key**: [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)

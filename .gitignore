@@ -1,7 +1,22 @@
-.env
+# Virtual environments
 venv/
-data/chroma_db/
-chroma_db/
+.venv/
+env/
+
+# Environment variables & secrets (NEVER COMMIT)
+.env
+.streamlit/secrets.toml
+
+# Python bytecode & cache
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Cache directories
+.cache/
+data/raw/.cache/
+
+# OS metadata
 .DS_Store
+Thumbs.db

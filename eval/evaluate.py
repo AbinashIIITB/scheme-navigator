@@ -24,7 +24,7 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from src.vectorstore import retrieve
-from src.config import TOP_K
+from src.config import TOP_K, SIM_THRESHOLD
 
 
 def evaluate_retrieval(
@@ -210,8 +210,6 @@ def evaluate_abstain(
 
 
 if __name__ == "__main__":
-    from src.config import SIM_THRESHOLD
-
     # Run retrieval benchmark first
     evaluate_retrieval()
 

@@ -1,15 +1,16 @@
 """
-generator.py — The brain of the RAG pipeline.
+generator.py — Grounded RAG prompt assembly, abstain guard, and LLM generation.
 
-Flow:
-    User query
-        → retrieve() — find relevant chunks from ChromaDB
-        → confidence check — abstain if similarity is too low
-        → build_prompt() — assemble a grounded prompt with cited clauses
-        → generate_llm_response() — call Google Gemini
-        → return structured answer with sources
+Pipeline:
+    1. retrieve(query, k)  → top-k relevant chunks with similarity scores.
+    2. Confidence check    → if highest score < threshold, ABSTAIN (no LLM call).
+    3. Prompt assembly     → inject retrieved clauses with [Source: ..., Page ...] tags.
+    4. Gemini call         → generate grounded answer citing the source clauses.
+    5. Fallback loop       → tries fallback models if the primary model errors out.
 """
 import os
+import sys
+from pathlib import Path
 from typing import List, Dict, Any
 
 from google import genai
@@ -17,16 +18,17 @@ from google import genai
 from src.config import GOOGLE_API_KEY, LLM_MODEL_NAME, TOP_K, SIM_THRESHOLD
 from src.vectorstore import retrieve
 
-
-# ── Fallback model list ───────────────────────────────────────────────────────
-# If the primary model is rate-limited or deprecated, we automatically try
+# ── Model fallback chain ───────────────────────────────────────────────────────
+# If the primary model hits a rate limit or error, the generator will try
 # the next one in this list. dict.fromkeys() preserves order and removes
 # duplicates (important if LLM_MODEL_NAME matches one of the hardcoded names).
 FALLBACK_MODELS = list(dict.fromkeys([
-    LLM_MODEL_NAME,
-    "gemini-2.5-flash",
-    "gemini-flash-latest",
-    "gemini-2.5-pro",
+    LLM_MODEL_NAME,                # Configured model (default: gemini-3.6-flash)
+    "gemini-3.6-flash",            # Latest stable Flash model
+    "gemini-3.5-flash",            # Stable Flash fallback
+    "gemini-3-flash-preview",      # Fast preview flash
+    "gemini-flash-lite-latest",    # Lightweight fallback
+    "gemini-flash-latest",         # Latest flash alias
 ]))
 
 # ── Singleton Gemini client ───────────────────────────────────────────────────
