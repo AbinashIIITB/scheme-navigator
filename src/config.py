@@ -34,7 +34,7 @@ CHUNK_OVERLAP = 50  # Overlap between chunks
 
 # Retrieval & Generation Configuration
 TOP_K = 5
-SIM_THRESHOLD = 0.40  # Minimum cosine similarity score (1 - cosine_distance) to proceed with generation
+SIM_THRESHOLD = 0.35  # Minimum cosine similarity score (1 - cosine_distance) to proceed with generation
 
 # LLM Configuration
 GOOGLE_API_KEY = _get_google_api_key()
