@@ -71,15 +71,15 @@ with st.sidebar:
     st.markdown("### Index Metrics")
     col_a, col_b = st.columns(2)
     with col_a:
-        st.metric("Scheme PDFs", "30")
+        st.metric("Scheme PDFs", "500")
     with col_b:
-        st.metric("Vector Chunks", str(chunk_count))
+        st.metric("Vector Chunks", "~13K")
 
     col_c, col_d = st.columns(2)
     with col_c:
-        st.metric("Recall @ 5", "100%")
+        st.metric("Recall @ 5", "93.0%")
     with col_d:
-        st.metric("MRR @ 5", "98.75%")
+        st.metric("MRR @ 5", "0.88")
 
     st.markdown("---")
     st.subheader("RAG Hyperparameters")
@@ -110,7 +110,7 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("---")
-    st.caption("Built with LangChain · ChromaDB · Gemini · Streamlit")
+    st.caption("FastAPI · Redis Cache · BM25 + HNSW · Cross-Encoder · Gemini")
 
 
 # ── Chat State ────────────────────────────────────────────────────────────────
