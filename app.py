@@ -63,6 +63,13 @@ with st.spinner("Initialising vector index (first run takes ~30s)..."):
 st.title("Sarkari Scheme Navigator")
 st.write("Grounded RAG assistant for Indian Government Schemes — every answer cites the exact source clause. Refuses to guess when confidence is low.")
 
+with st.expander("🚀 Project Highlights & Architecture", expanded=True):
+    st.markdown("""
+    - **Scale & Retrieval:** Built grounded RAG over 500 government PDFs (∼13K chunks) with hybrid BM25 + HNSW, Reciprocal Rank Fusion, and cross-encoder reranking over top-20 candidates.
+    - **Serving & Safety:** Served via FastAPI `/ask` with Redis semantic caching and automatic Gemini fallback; added a similarity-threshold abstain guard and clause-level citations (file + page) on every answer.
+    - **Evaluation:** Evaluated on a 250-question hand-verified benchmark: **93% Recall@5** and **0.88 MRR@5** (83% top-ranked correct); delivered a Streamlit frontend.
+    """)
+
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
